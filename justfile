@@ -144,6 +144,20 @@ logs service="":
         fi; \
     fi
 
+# 查看所有服务日志
+logs-all:
+    @echo "📜 查看所有服务日志:"
+    @if [ -f "master-compose.yml" ]; then \
+        echo "🔍 主机服务日志:"; \
+        docker compose -f master-compose.yml logs -f --tail=50; \
+    elif [ -f "worker-compose.yml" ]; then \
+        echo "🔍 僚机服务日志:"; \
+        docker compose -f worker-compose.yml logs -f --tail=50; \
+    else \
+        echo "❌ 未找到compose文件"; \
+    fi
+
+
 # 清理所有数据（危险操作）
 clean:
     @echo "⚠️  警告: 这将删除所有数据和容器！"
