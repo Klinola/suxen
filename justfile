@@ -95,18 +95,13 @@ worker-status:
     @echo "📊 僚机服务状态:"
     @docker compose -f worker-compose.yml --env-file {{worker_env}} ps
     @echo ""
-    @echo "🔍 本地服务健康检查:"
-    @echo -n "Redis本地: "
-    @docker exec $(docker ps -q -f name=redis-local) redis-cli ping 2>/dev/null || echo "❌ 异常"
-    @echo -n "PostgreSQL本地: "
-    @docker exec $(docker ps -q -f name=postgres-local) pg_isready -U worker -d taskdb 2>/dev/null && echo "✅ 正常" || echo "❌ 异常"
-    @echo -n "MinIO本地: "
-    @curl -s http://localhost:9000/minio/health/live >/dev/null && echo "✅ 正常" || echo "❌ 异常"
-    @echo ""
-    @echo "🔄 同步状态检查:"
-    @echo -n "Redis主从同步: "
-    @docker exec $(docker ps -q -f name=redis-local) redis-cli info replication | grep "master_host:" || echo "❌ 未同步"
-    @echo ""
+    @echo "🔍 远程服务健康检查:"
+    @echo -n "Redis远程: "
+    @redis-cli -h $(grep MASTER_HOST_IP {{worker_env}} | cut -d'=' -f2) -p 6379 ping 2>/dev/null && echo "✅ 正常" || echo "❌ 异常"
+    @echo -n "PostgreSQL远程: "
+    @pg_isready -h $(grep MASTER_HOST_IP {{worker_env}} | cut -d'=' -f2) -p 5432 -U worker -d taskdb 2>/dev/null && echo "✅ 正常" || echo "❌ 异常"
+    @echo -n "MinIO远程: "
+    @curl -s http://$(grep MASTER_HOST_IP {{worker_env}} | cut -d'=' -f2):9000/minio/health/live >/dev/null && echo "✅ 正常" || echo "❌ 异常"
     @echo "🎮 GPU代理数量: $(docker ps --filter 'name=gpu_prove_agent' --format '{.Names}' | wc -l)"
 
 # 查看完整集群状态
@@ -144,18 +139,27 @@ logs service="":
         fi; \
     fi
 
-# 查看所有服务日志
-logs-all:
-    @echo "📜 查看所有服务日志:"
+# 查看主机服务日志
+logs-master:
+    @echo "📜 查看主机服务日志:"
     @if [ -f "master-compose.yml" ]; then \
-        echo "🔍 主机服务日志:"; \
         docker compose -f master-compose.yml logs -f --tail=50; \
-    elif [ -f "worker-compose.yml" ]; then \
-        echo "🔍 僚机服务日志:"; \
+    else \
+        echo "❌ 未找到master-compose.yml文件"; \
+    fi
+
+# 查看僚机服务日志
+logs-worker:
+    @echo "📜 查看僚机服务日志:"
+    @if [ -f "worker-compose.yml" ]; then \
         docker compose -f worker-compose.yml logs -f --tail=50; \
     else \
-        echo "❌ 未找到compose文件"; \
+        echo "❌ 未找到worker-compose.yml文件"; \
     fi
+
+# 查看所有服务日志 (兼容旧命令)
+logs-all:
+    @echo "📜 请使用 logs-master 或 logs-worker 命令"
 
 
 # 清理所有数据（危险操作）
