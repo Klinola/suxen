@@ -3,9 +3,9 @@ name: bento-worker
 
 # 基础环境变量定义 - 通过Master的pgbouncer连接池
 x-base-environment: &base-environment
-  DATABASE_URL: postgresql://${POSTGRES_USER:-worker}:${POSTGRES_PASSWORD:-password}@${MASTER_HOST_IP}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-taskdb}
-  REDIS_URL: redis://${MASTER_HOST_IP}:6379
-  S3_URL: http://${MASTER_HOST_IP}:9000
+  DATABASE_URL: postgresql://${POSTGRES_USER:-worker}:${POSTGRES_PASSWORD:-password}@${MASTER_HOST_IP:-172.31.0.9}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-taskdb}
+  REDIS_URL: redis://${MASTER_HOST_IP:-172.31.0.9}:6379
+  S3_URL: http://${MASTER_HOST_IP:-172.31.0.9}:9000
   S3_BUCKET: ${MINIO_BUCKET:-workflow}
   S3_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
   S3_SECRET_KEY: ${MINIO_ROOT_PASS:-password}
@@ -107,19 +107,19 @@ services:
               capabilities: [gpu]
 
   # Executor Agents (Worker节点2个Exec agents)
-  exec_agent0: &exec-agent
-    image: risczero/risc0-bento-agent:2.3.0@sha256:5b029fb8074b3273b45e6e8fb4d6dbd86000a216688d8f1429eb893686cc1ff8
-    restart: always
-    mem_limit: 4G
-    cpus: 4
-    environment:
-      <<: *base-environment
-    entrypoint: /app/agent -t exec --segment-po2 ${SEGMENT_SIZE:-21} --redis-ttl ${REDIS_TTL:-57600}
-    networks:
-      - worker-network
+  # exec_agent0: &exec-agent
+  #   image: risczero/risc0-bento-agent:2.3.0@sha256:5b029fb8074b3273b45e6e8fb4d6dbd86000a216688d8f1429eb893686cc1ff8
+  #   restart: always
+  #   mem_limit: 4G
+  #   cpus: 4
+  #   environment:
+  #     <<: *base-environment
+  #   entrypoint: /app/agent -t exec --segment-po2 ${SEGMENT_SIZE:-21} --redis-ttl ${REDIS_TTL:-57600}
+  #   networks:
+  #     - worker-network
 
-  exec_agent1: 
-    <<: *exec-agent
+  # exec_agent1: 
+  #   <<: *exec-agent
 
 networks:
   worker-network:
