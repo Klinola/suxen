@@ -1,9 +1,9 @@
 # 工作节点配置 - 集中式架构，直连主节点
 name: bento-worker
 
-# 基础环境变量定义 - 直连主节点集中式服务
+# 基础环境变量定义 - 通过Master的pgbouncer连接池
 x-base-environment: &base-environment
-  DATABASE_URL: postgresql://${POSTGRES_USER:-worker}:${POSTGRES_PASSWORD:-password}@${MASTER_HOST_IP}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-taskdb}
+  DATABASE_URL: postgresql://${POSTGRES_USER:-worker}:${POSTGRES_PASSWORD:-password}@${MASTER_HOST_IP}:${POSTGRES_PORT:-6432}/${POSTGRES_DB:-taskdb}
   REDIS_URL: redis://${MASTER_HOST_IP}:6379
   S3_URL: http://${MASTER_HOST_IP}:9000
   S3_BUCKET: ${MINIO_BUCKET:-workflow}
@@ -218,6 +218,6 @@ networks:
     ipam:
       config:
         - subnet: 172.21.0.0/16
-        gateway: 172.21.0.1
+          gateway: 172.21.0.1
 
 # 工作节点使用集中式服务，无需本地存储卷
