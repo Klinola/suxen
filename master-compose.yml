@@ -3,8 +3,8 @@ name: bento-master
 
 # 基础环境变量定义
 x-base-environment: &base-environment
-  # Direct postgres connection (bypassing pgbouncer for now)
-  DATABASE_URL: postgresql://${POSTGRES_USER:-worker}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-taskdb}
+  # Using pgbouncer for connection pooling
+  DATABASE_URL: postgresql://${POSTGRES_USER:-worker}:${POSTGRES_PASSWORD:-password}@pgbouncer:5432/${POSTGRES_DB:-taskdb}
   REDIS_URL: redis://redis:6379
   S3_URL: http://minio:9000
   S3_BUCKET: ${MINIO_BUCKET:-workflow}
@@ -88,7 +88,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-taskdb}
       POSTGRES_USER: ${POSTGRES_USER:-worker}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-      POSTGRES_INITDB_ARGS: "--data-checksums --wal-segsize=64"
+      POSTGRES_INITDB_ARGS: "--data-checksums --wal-segsize=64 --auth-host=md5 --auth-local=trust"
       # PGDATA: /var/lib/postgresql/data/pgdata # 看看是否需要这行环境变量来强制初始化？
     ports:
       - '${MASTER_HOST_IP:-0.0.0.0}:${POSTGRES_PORT:-5432}:${POSTGRES_PORT:-5432}'
@@ -146,7 +146,7 @@ services:
       - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
 
       # --- 3. 定义 PgBouncer 自身的行为 ---
-      - AUTH_TYPE=trust
+      - AUTH_TYPE=md5
       - POOL_MODE=transaction
       - MAX_CLIENT_CONN=5000
       - DEFAULT_POOL_SIZE=20

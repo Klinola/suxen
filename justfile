@@ -69,7 +69,7 @@ master-status:
     @echo -n "PostgreSQL: "
     @docker exec $(docker ps -q -f name=postgres) pg_isready -U worker -d taskdb 2>/dev/null && echo "✅ 正常" || echo "❌ 异常"
     @echo -n "MinIO: "
-    @curl -s http://$(grep MASTER_HOST_IP {{default_env}} | cut -d'=' -f2):9000/minio/health/live >/dev/null && echo "✅ 正常" || echo "❌ 异常"
+    @curl -s http://localhost:9000/minio/health/live >/dev/null && echo "✅ 正常" || echo "❌ 异常"
     @echo ""
     @echo "🎮 GPU代理数量: $(docker ps --filter 'name=gpu_prove_agent' --format '{.Names}' | wc -l)"
 
