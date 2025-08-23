@@ -91,7 +91,7 @@ services:
       POSTGRES_INITDB_ARGS: "--data-checksums --wal-segsize=64 --auth-host=md5 --auth-local=trust"
       # PGDATA: /var/lib/postgresql/data/pgdata # 看看是否需要这行环境变量来强制初始化？
     ports:
-      - '${MASTER_HOST_IP:-0.0.0.0}:${POSTGRES_PORT:-5432}:${POSTGRES_PORT:-5432}'
+      - '0.0.0.0:${POSTGRES_PORT:-5432}:${POSTGRES_PORT:-5432}'
     volumes:
      - postgres-data:/var/lib/postgresql/data
     command: >
@@ -131,7 +131,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "0.0.0.0:6432:6432"
+      - "0.0.0.0:6432:5432"
     # --- MODIFIED ---: 使用符合 edoburu/pgbouncer 官方写法的环境变量
     environment:
       # --- 1. 定义要连接的上游数据库 ---
