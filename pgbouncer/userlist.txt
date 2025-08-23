@@ -1,0 +1,1 @@
+"worker" "SCRAM-SHA-256$4096:/2qWzZPXvkSRfG3dKiR81A==$g1D6taGGMuzHyKTChWfa4g/Id1yGfS2Bz2FtuBjfBbI=:L9a7QX58VCBxpWbvwtGk7dUa/ayALf2wcB3XgxjKy4o="

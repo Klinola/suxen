@@ -3,9 +3,8 @@ name: bento-master
 
 # 基础环境变量定义
 x-base-environment: &base-environment
-  # DATABASE_URL: postgresql://${POSTGRES_USER:-worker}:${POSTGRES_PASSWORD:-password}@postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-taskdb}
-  # add pgbouncer 
-  DATABASE_URL: postgresql://${POSTGRES_USER:-worker}:${POSTGRES_PASSWORD:-password}@pgbouncer:6432/${POSTGRES_DB:-taskdb}
+  # Direct postgres connection (bypassing pgbouncer for now)
+  DATABASE_URL: postgresql://${POSTGRES_USER:-worker}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-taskdb}
   REDIS_URL: redis://redis:6379
   S3_URL: http://minio:9000
   S3_BUCKET: ${MINIO_BUCKET:-workflow}
@@ -31,10 +30,11 @@ services:
     # 80 GPU集中式Redis优化配置
     mem_limit: ${REDIS_MEM_LIMIT:-256G}
     cpus: ${REDIS_CPUS:-32}
-    sysctls:
-      - net.core.somaxconn=${REDIS_SOMAXCONN:-65535}
-      - net.core.netdev_max_backlog=10000
-      - net.ipv4.tcp_max_syn_backlog=16384
+    # --- MODIFIED ---: 移除了可能导致启动失败的 sysctls 配置
+    # sysctls:
+    #   - net.core.somaxconn=${REDIS_SOMAXCONN:-65535}
+    #   - net.core.netdev_max_backlog=10000
+    #   - net.ipv4.tcp_max_syn_backlog=16384
     ulimits:
       memlock: -1
       nofile:
@@ -55,12 +55,10 @@ services:
       --appendfsync everysec
       --io-threads 16
       --io-threads-do-reads yes
-      # 高并发优化
       --lazyfree-lazy-eviction yes
       --lazyfree-lazy-expire yes
       --lazyfree-lazy-server-del yes
       --replica-lazy-flush yes
-      # 网络优化
       --tcp-keepalive 60
       --client-output-buffer-limit "normal 0 0 0"
       --client-output-buffer-limit "replica 268435456 67108864 60"
@@ -74,17 +72,15 @@ services:
     networks:
       - bento-network
 
-  # PostgreSQL主节点 - 针对50 GPU优化
+  # PostgreSQL主节点
   postgres:
     hostname: ${POSTGRES_HOST:-postgres}
     image: ${POSTGRES_IMG:-postgres:16.3-bullseye}
     restart: always
-    # 大规模GPU集群资源配置 : 192G
     mem_limit: ${POSTGRES_MEM_LIMIT:-192G}
     cpus: ${POSTGRES_CPUS:-24}
     shm_size: ${POSTGRES_SHM_SIZE:-16G}
     ulimits:
-      # memlock: -1
       nofile:
         soft: 65536
         hard: 65536
@@ -93,17 +89,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-worker}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       POSTGRES_INITDB_ARGS: "--data-checksums --wal-segsize=64"
-    expose:
-      - '${POSTGRES_PORT:-5432}'
+      # PGDATA: /var/lib/postgresql/data/pgdata # 看看是否需要这行环境变量来强制初始化？
     ports:
       - '${MASTER_HOST_IP:-0.0.0.0}:${POSTGRES_PORT:-5432}:${POSTGRES_PORT:-5432}'
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-      # - type: tmpfs
-      #   target: /tmp
-      #   tmpfs:
-      #     size: 4G
-    # 针对50 GPU优化的PostgreSQL配置
+     - postgres-data:/var/lib/postgresql/data
     command: >
       postgres
       -p ${POSTGRES_PORT:-5432}
@@ -116,20 +106,11 @@ services:
       -c max_wal_size=4GB
       -c min_wal_size=1GB
       -c checkpoint_completion_target=0.9
-      -c checkpoint_timeout=15min
       -c random_page_cost=1.1
       -c effective_io_concurrency=200
       -c max_worker_processes=16
       -c max_parallel_workers=8
       -c max_parallel_workers_per_gather=4
-      -c default_statistics_target=500
-      -c autovacuum_max_workers=6
-      -c autovacuum_naptime=30s
-      -c log_min_duration_statement=1000
-      -c log_checkpoints=on
-      -c log_connections=on
-      -c log_disconnections=on
-      -c log_lock_waits=on
       -c listen_addresses='*'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-worker} -d ${POSTGRES_DB:-taskdb}"]
@@ -139,9 +120,11 @@ services:
       start_period: 30s
     networks:
       - bento-network
-  # pgbouncer listening to connection pools
+
+  # pgbouncer 连接池
   pgbouncer:
-    image: bitnami/pgbouncer:latest
+    # 镜像保持不变
+    image: edoburu/pgbouncer:latest
     hostname: pgbouncer
     restart: always
     depends_on:
@@ -149,27 +132,34 @@ services:
         condition: service_healthy
     ports:
       - "0.0.0.0:6432:6432"
+    # --- MODIFIED ---: 使用符合 edoburu/pgbouncer 官方写法的环境变量
+    environment:
+      # --- 1. 定义要连接的上游数据库 ---
+      # 告诉 PgBouncer，当客户端请求 "taskdb" 时，应该去哪里找
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=taskdb
+
+      # --- 2. 定义允许连接到 PgBouncer 的用户和密码 ---
+      # 这将自动写入 userlist.txt
+      - DB_USER=${POSTGRES_USER:-worker}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
+
+      # --- 3. 定义 PgBouncer 自身的行为 ---
+      - AUTH_TYPE=trust
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=5000
+      - DEFAULT_POOL_SIZE=20
+      - MAX_SERVER_CONNECTIONS=200
+      # 增加日志输出，便于调试
+      - VERBOSE=1
     networks:
       - bento-network
-    environment:
-      - POSTGRESQL_HOST=postgres
-      - POSTGRESQL_PORT=5432
-      - POSTGRESQL_USERNAME=worker
-      - POSTGRESQL_PASSWORD=password
-      - POSTGRESQL_DATABASE=taskdb
-      - PGBOUNCER_POOL_MODE=transaction
-      - PGBOUNCER_MAX_CLIENT_CONN=5000
-      - PGBOUNCER_DEFAULT_POOL_SIZE=20
-      - PGBOUNCER_MAX_DB_CONNECTIONS=200
-      - PGBOUNCER_AUTH_TYPE=md5
-      - PGBOUNCER_USERNAME=worker
-      - PGBOUNCER_PASSWORD=password
-  # MinIO主节点 - 支持分布式同步
+  # MinIO主节点
   minio:
     hostname: ${MINIO_HOST:-minio}
     image: ${MINIO_IMG:-minio/minio:RELEASE.2024-05-28T17-19-04Z}
     restart: always
-    # 大规模GPU集群资源配置
     mem_limit: ${MINIO_MEM_LIMIT:-32G}
     cpus: ${MINIO_CPUS:-4}
     ulimits:
@@ -189,25 +179,7 @@ services:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-admin}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASS:-password}
       - MINIO_DEFAULT_BUCKETS=${MINIO_BUCKET:-workflow}
-      # MinIO性能优化配置
-      - MINIO_API_REQUESTS_MAX=5000
-      - MINIO_API_REQUESTS_DEADLINE=10m
-      - MINIO_API_CLUSTER_DEADLINE=10m
-      - MINIO_API_CORS_ALLOW_ORIGIN=*
-      - MINIO_CACHE=on
-      - MINIO_CACHE_DRIVES=/tmp/cache
-      - MINIO_CACHE_QUOTA=80
-      - MINIO_COMPRESS=on
-      - MINIO_COMPRESS_ENABLE=on
-      - MINIO_API_SECURE=off
-      - MINIO_PROMETHEUS_AUTH_TYPE=public
-      # 启用MinIO远程复制
-      - MINIO_SITE_REGION=master
-      - MINIO_SITE_NAME=master-site
-    command: >
-      server /data
-      --console-address ":9001"
-      --address ":9000"
+    command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 30s
@@ -215,22 +187,25 @@ services:
       retries: 3
       start_period: 3m
     networks:
-            - bento-network
+      - bento-network
 
   # GPU Prove Agents (主机8个GPU)
   gpu_prove_agent0: &gpu-agent
     image: risczero/risc0-bento-agent:2.3.0@sha256:5b029fb8074b3273b45e6e8fb4d6dbd86000a216688d8f1429eb893686cc1ff8
     runtime: nvidia
     restart: always
+    # --- MODIFIED ---: 修正了启动依赖
     depends_on:
-      - postgres
-      - redis
-      - minio
+      pgbouncer:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     mem_limit: 24G
     cpus: 4
     environment:
       <<: *base-environment
-      LD_LIBRARY_PATH: ${LD_LIBRARY_PATH:-/usr/local/cuda-12.6/compat/}
     entrypoint: /app/agent -t prove --redis-ttl ${REDIS_TTL:-57600}
     deploy:
       resources:
@@ -242,168 +217,94 @@ services:
     networks:
       - bento-network
 
-  gpu_prove_agent1:
-    <<: *gpu-agent
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['1']
-              capabilities: [gpu]
-
-  gpu_prove_agent2:
-    <<: *gpu-agent
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['2']
-              capabilities: [gpu]
-
-  gpu_prove_agent3:
-    <<: *gpu-agent
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['3']
-              capabilities: [gpu]
-
-  gpu_prove_agent4:
-    <<: *gpu-agent
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['4']
-              capabilities: [gpu]
-
-  gpu_prove_agent5:
-    <<: *gpu-agent
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['5']
-              capabilities: [gpu]
-
-  gpu_prove_agent6:
-    <<: *gpu-agent
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['6']
-              capabilities: [gpu]
-
-  gpu_prove_agent7:
-    <<: *gpu-agent
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['7']
-              capabilities: [gpu]
+  gpu_prove_agent1: { <<: *gpu-agent, deploy: { resources: { reservations: { devices: [ { driver: nvidia, device_ids: ['1'], capabilities: [gpu] } ] } } } }
+  gpu_prove_agent2: { <<: *gpu-agent, deploy: { resources: { reservations: { devices: [ { driver: nvidia, device_ids: ['2'], capabilities: [gpu] } ] } } } }
+  gpu_prove_agent3: { <<: *gpu-agent, deploy: { resources: { reservations: { devices: [ { driver: nvidia, device_ids: ['3'], capabilities: [gpu] } ] } } } }
+  gpu_prove_agent4: { <<: *gpu-agent, deploy: { resources: { reservations: { devices: [ { driver: nvidia, device_ids: ['4'], capabilities: [gpu] } ] } } } }
+  gpu_prove_agent5: { <<: *gpu-agent, deploy: { resources: { reservations: { devices: [ { driver: nvidia, device_ids: ['5'], capabilities: [gpu] } ] } } } }
+  gpu_prove_agent6: { <<: *gpu-agent, deploy: { resources: { reservations: { devices: [ { driver: nvidia, device_ids: ['6'], capabilities: [gpu] } ] } } } }
+  gpu_prove_agent7: { <<: *gpu-agent, deploy: { resources: { reservations: { devices: [ { driver: nvidia, device_ids: ['7'], capabilities: [gpu] } ] } } } }
 
   # Executor Agents
   exec_agent0: &exec-agent
     image: risczero/risc0-bento-agent:2.3.0@sha256:5b029fb8074b3273b45e6e8fb4d6dbd86000a216688d8f1429eb893686cc1ff8
     restart: always
+    # --- MODIFIED ---: 修正了启动依赖
     depends_on:
-      - postgres
-      - redis
-      - minio
+      pgbouncer:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     mem_limit: 4G
     cpus: 4
     environment:
       <<: *base-environment
-      LD_LIBRARY_PATH: ${LD_LIBRARY_PATH:-/usr/local/cuda-12.6/compat/}
-      RISC0_KECCAK_PO2: ${RISC0_KECCAK_PO2:-17}
     entrypoint: /app/agent -t exec --segment-po2 ${SEGMENT_SIZE:-21} --redis-ttl ${REDIS_TTL:-57600}
     networks:
       - bento-network
 
-  exec_agent1:
-    <<: *exec-agent
-
-  exec_agent2:
-    <<: *exec-agent
-
-  exec_agent3:
-    <<: *exec-agent
+  exec_agent1: { <<: *exec-agent }
+  exec_agent2: { <<: *exec-agent }
+  exec_agent3: { <<: *exec-agent }
 
   # Aux Agent
   aux_agent:
     image: risczero/risc0-bento-agent:2.3.0@sha256:5b029fb8074b3273b45e6e8fb4d6dbd86000a216688d8f1429eb893686cc1ff8
     restart: always
+    # --- MODIFIED ---: 修正了启动依赖
     depends_on:
-      - postgres
-      - redis
-      - minio
+      pgbouncer:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     mem_limit: 256M
     cpus: 1
     environment:
       <<: *base-environment
-      LD_LIBRARY_PATH: ${LD_LIBRARY_PATH:-/usr/local/cuda-12.6/compat/}
     entrypoint: /app/agent -t aux --monitor-requeue --redis-ttl ${REDIS_TTL:-57600}
     networks:
       - bento-network
 
-  # SNARK Agents (主节点集中处理，CPU密集型)
-  snark_agent0:
+  # SNARK Agents
+  snark_agent0: &snark-agent
     image: risczero/risc0-bento-agent:2.3.0@sha256:5b029fb8074b3273b45e6e8fb4d6dbd86000a216688d8f1429eb893686cc1ff8
     restart: always
+    # --- MODIFIED ---: 修正了启动依赖
     depends_on:
-      - postgres
-      - redis
-      - minio
+      pgbouncer:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     mem_limit: 16G
     cpus: 48
     environment:
       <<: *base-environment
-      LD_LIBRARY_PATH: ${LD_LIBRARY_PATH:-/usr/local/cuda-12.6/compat/}
-      AGENT_ID: "master-snark-0"
-      NODE_ID: "master"
     entrypoint: /app/agent -t snark --redis-ttl ${REDIS_TTL:-57600}
     ulimits:
       stack: 90000000
     networks:
       - bento-network
 
-  snark_agent1:
-    image: risczero/risc0-bento-agent:2.3.0@sha256:5b029fb8074b3273b45e6e8fb4d6dbd86000a216688d8f1429eb893686cc1ff8
-    restart: always
-    depends_on:
-      - postgres
-      - redis
-      - minio
-    mem_limit: 16G
-    cpus: 48
-    environment:
-      <<: *base-environment
-      LD_LIBRARY_PATH: ${LD_LIBRARY_PATH:-/usr/local/cuda-12.6/compat/}
-      AGENT_ID: "master-snark-1"
-      NODE_ID: "master"
-    entrypoint: /app/agent -t snark --redis-ttl ${REDIS_TTL:-57600}
-    ulimits:
-      stack: 90000000
-    networks:
-      - bento-network
+  snark_agent1: { <<: *snark-agent }
 
   # REST API
   rest_api:
     image: risczero/risc0-bento-rest-api:2.3.0@sha256:caa6012548777a461b4e487d673bd0d23606f97cdecea9d1612fafd8fa8a9102
     restart: always
+    # --- MODIFIED ---: 修正了启动依赖
     depends_on:
-      - postgres
-      - minio
+      pgbouncer:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     mem_limit: 1G
     cpus: 1
     environment:
@@ -417,9 +318,6 @@ services:
 networks:
   bento-network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
 
 volumes:
   redis-data:
