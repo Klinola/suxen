@@ -13,6 +13,10 @@ x-base-environment: &base-environment
   RUST_LOG: ${RUST_LOG:-info}
   RUST_BACKTRACE: 1
 
+# 统一镜像版本管理
+x-agent-image: &agent-image risczero/risc0-bento-agent:3.0.0@sha256:04e67bdd808281d364f6678999b57debd710afb8eb0359af8161e63cd13e7d50
+x-rest-api-image: &rest-api-image risczero/risc0-bento-rest-api:3.0.0@sha256:caa6012548777a461b4e487d673bd0d23606f97cdecea9d1612fafd8fa8a9102
+
 services:
   # Redis集群主节点 - 针对80 GPU集中式优化
   redis:
@@ -191,7 +195,7 @@ services:
 
   # GPU Prove Agents (主机8个GPU)
   gpu_prove_agent0: &gpu-agent
-    image: risczero/risc0-bento-agent:2.3.0@sha256:5b029fb8074b3273b45e6e8fb4d6dbd86000a216688d8f1429eb893686cc1ff8
+    image: *agent-image
     runtime: nvidia
     restart: always
     # --- MODIFIED ---: 修正了启动依赖
@@ -227,7 +231,7 @@ services:
 
   # Executor Agents
   exec_agent0: &exec-agent
-    image: risczero/risc0-bento-agent:2.3.0@sha256:5b029fb8074b3273b45e6e8fb4d6dbd86000a216688d8f1429eb893686cc1ff8
+    image: *agent-image
     restart: always
     # --- MODIFIED ---: 修正了启动依赖
     depends_on:
@@ -251,7 +255,7 @@ services:
 
   # Aux Agent
   aux_agent:
-    image: risczero/risc0-bento-agent:2.3.0@sha256:5b029fb8074b3273b45e6e8fb4d6dbd86000a216688d8f1429eb893686cc1ff8
+    image: *agent-image
     restart: always
     # --- MODIFIED ---: 修正了启动依赖
     depends_on:
@@ -271,7 +275,7 @@ services:
 
   # SNARK Agents
   snark_agent0: &snark-agent
-    image: risczero/risc0-bento-agent:2.3.0@sha256:5b029fb8074b3273b45e6e8fb4d6dbd86000a216688d8f1429eb893686cc1ff8
+    image: *agent-image
     restart: always
     # --- MODIFIED ---: 修正了启动依赖
     depends_on:
@@ -295,7 +299,7 @@ services:
 
   # REST API
   rest_api:
-    image: risczero/risc0-bento-rest-api:2.3.0@sha256:caa6012548777a461b4e487d673bd0d23606f97cdecea9d1612fafd8fa8a9102
+    image: *rest-api-image
     restart: always
     # --- MODIFIED ---: 修正了启动依赖
     depends_on:

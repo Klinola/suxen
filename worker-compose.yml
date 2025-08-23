@@ -15,10 +15,13 @@ x-base-environment: &base-environment
   no_proxy: "localhost,127.0.0.1,::1,192.168.0.0/16,172.16.0.0/12,10.0.0.0/8"
   NO_PROXY: "localhost,127.0.0.1,::1,192.168.0.0/16,172.16.0.0/12,10.0.0.0/8"
 
+# 统一agent镜像版本管理
+x-agent-image: &agent-image risczero/risc0-bento-agent:3.0.0@sha256:04e67bdd808281d364f6678999b57debd710afb8eb0359af8161e63cd13e7d50
+
 services:
   # GPU Prove Agents (Worker节点8个GPU)
   gpu_prove_agent0: &gpu-agent
-    image: risczero/risc0-bento-agent:2.3.0@sha256:5b029fb8074b3273b45e6e8fb4d6dbd86000a216688d8f1429eb893686cc1ff8
+    image: *agent-image
     runtime: nvidia
     restart: always
     mem_limit: 24G
@@ -108,7 +111,7 @@ services:
 
   # Executor Agents (Worker节点2个Exec agents)
   exec_agent0: &exec-agent
-    image: risczero/risc0-bento-agent:2.3.0@sha256:5b029fb8074b3273b45e6e8fb4d6dbd86000a216688d8f1429eb893686cc1ff8
+    image: *agent-image
     restart: always
     mem_limit: 4G
     cpus: 4
