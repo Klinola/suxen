@@ -36,8 +36,7 @@ services:
             - driver: nvidia
               device_ids: ['0']
               capabilities: [gpu]
-    networks:
-      - worker-network
+    network_mode: host
 
   gpu_prove_agent1: 
     <<: *gpu-agent
@@ -48,6 +47,7 @@ services:
             - driver: nvidia
               device_ids: ['1']
               capabilities: [gpu]
+    network_mode: host
 
   gpu_prove_agent2: 
     <<: *gpu-agent
@@ -58,6 +58,7 @@ services:
             - driver: nvidia
               device_ids: ['2']
               capabilities: [gpu]
+    network_mode: host
 
   gpu_prove_agent3: 
     <<: *gpu-agent
@@ -68,6 +69,7 @@ services:
             - driver: nvidia
               device_ids: ['3']
               capabilities: [gpu]
+    network_mode: host
 
   gpu_prove_agent4: 
     <<: *gpu-agent
@@ -78,6 +80,7 @@ services:
             - driver: nvidia
               device_ids: ['4']
               capabilities: [gpu]
+    network_mode: host
 
   gpu_prove_agent5: 
     <<: *gpu-agent
@@ -88,6 +91,7 @@ services:
             - driver: nvidia
               device_ids: ['5']
               capabilities: [gpu]
+    network_mode: host
 
   gpu_prove_agent6: 
     <<: *gpu-agent
@@ -98,6 +102,7 @@ services:
             - driver: nvidia
               device_ids: ['6']
               capabilities: [gpu]
+    network_mode: host
 
   gpu_prove_agent7: 
     <<: *gpu-agent
@@ -108,6 +113,7 @@ services:
             - driver: nvidia
               device_ids: ['7']
               capabilities: [gpu]
+    network_mode: host
 
   # Executor Agents (Worker节点2个Exec agents)
   # exec_agent0: &exec-agent
@@ -124,12 +130,6 @@ services:
   # exec_agent1: 
   #   <<: *exec-agent
 
-networks:
-  worker-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.21.0.0/16
-          gateway: 172.21.0.1
+# 使用host网络模式，无需自定义网络配置
 
 # Worker节点使用集中式服务，无需本地存储卷
