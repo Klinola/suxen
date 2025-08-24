@@ -61,6 +61,12 @@ master-down:
     docker compose -f master-compose.yml --env-file {{default_env}} down
     @echo "✅ 主机服务已停止"
 
+# 停止主机服务
+master-clean:
+    @echo "🛑 停止主机服务..."
+    docker compose -f master-compose.yml --env-file {{default_env}} down -v
+    @echo "✅ 主机服务已停止"
+
 # 查看主机状态
 master-status:
     @echo "📊 主机服务状态:"
