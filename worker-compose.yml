@@ -16,7 +16,7 @@ x-base-environment: &base-environment
   NO_PROXY: "localhost,127.0.0.1,::1,192.168.0.0/16,172.16.0.0/12,10.0.0.0/8"
 
 # 统一agent镜像版本管理
-x-agent-image: &agent-image risczero/risc0-bento-agent:3.0.0@sha256:04e67bdd808281d364f6678999b57debd710afb8eb0359af8161e63cd13e7d50
+x-agent-image: &agent-image risczero/risc0-bento-agent:2.3.0
 
 services:
   # GPU Prove Agents (Worker节点8个GPU)
