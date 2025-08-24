@@ -13,9 +13,11 @@ help:
     @echo "  config          - 配置主机IP和资源参数"
     @echo "  master up       - 启动主机服务"
     @echo "  master down     - 停止主机服务"
+    @echo "  master clean    - 彻底清理主机服务（删除所有数据）"
     @echo "  master status   - 查看主机状态"
     @echo "  worker up       - 启动僚机服务"
     @echo "  worker down     - 停止僚机服务"
+    @echo "  worker clean    - 彻底清理僚机服务"
     @echo "  worker status   - 查看僚机状态"
     @echo "  status          - 查看完整集群状态"
     @echo "  logs [service]  - 查看日志"
@@ -51,9 +53,7 @@ master-up:
     docker compose -f master-compose.yml --env-file {{default_env}} up -d
     @echo "✅ 主机服务启动完成"
     @echo ""
-    @echo "🔍 验证服务状态:"
-    @sleep 5
-    @just master-status
+    @just master-logs
 
 # 停止主机服务
 master-down:
@@ -61,11 +61,17 @@ master-down:
     docker compose -f master-compose.yml --env-file {{default_env}} down
     @echo "✅ 主机服务已停止"
 
-# 停止主机服务
+# 彻底清理主机服务（包括数据库和存储）
 master-clean:
-    @echo "🛑 停止主机服务..."
-    docker compose -f master-compose.yml --env-file {{default_env}} down -v
-    @echo "✅ 主机服务已停止"
+    @echo "🛑 彻底清理主机服务..."
+    @echo "⚠️  这将删除所有数据库记录、MinIO文件和容器！"
+    @# 优雅停止服务
+    @docker compose -f master-compose.yml --env-file {{default_env}} stop 2>/dev/null || true
+    @# 删除容器和卷
+    @docker compose -f master-compose.yml --env-file {{default_env}} down -v --remove-orphans 2>/dev/null || true
+    @# 清理相关网络
+    @docker network rm bento-master_bento-network 2>/dev/null || true
+    @echo "✅ 主机服务彻底清理完成"
 
 # 查看主机状态
 master-status:
@@ -89,15 +95,22 @@ worker-up:
     docker compose -f worker-compose.yml --env-file {{worker_env}} up -d
     @echo "✅ 僚机服务启动完成"
     @echo ""
-    @echo "🔍 验证服务状态:"
-    @sleep 10
-    @just worker-status
+    @just worker-logs
 
 # 停止僚机服务
 worker-down:
     @echo "🛑 停止僚机服务..."
     docker compose -f worker-compose.yml --env-file {{worker_env}} down
     @echo "✅ 僚机服务已停止"
+
+# 彻底清理僚机服务
+worker-clean:
+    @echo "🛑 彻底清理僚机服务..."
+    @# 优雅停止服务
+    @docker compose -f worker-compose.yml --env-file {{worker_env}} stop 2>/dev/null || true
+    @# 删除容器（worker无卷，但清理容器和网络）
+    @docker compose -f worker-compose.yml --env-file {{worker_env}} down --remove-orphans 2>/dev/null || true
+    @echo "✅ 僚机服务彻底清理完成"
 
 # 查看僚机状态
 worker-status:
@@ -171,19 +184,24 @@ logs-all:
     @echo "📜 请使用 logs-master 或 logs-worker 命令"
 
 
-# 清理所有数据（危险操作）
+# 彻底清理所有数据（危险操作）
 clean:
-    @echo "⚠️  警告: 这将删除所有数据和容器！"
-    @echo "是否确认清理? [y/N]"
+    @echo "🚨 危险操作: 这将彻底删除所有数据、容器和网络！"
+    @echo "包括: 数据库记录、MinIO文件、Redis缓存、所有容器和网络（保留镜像）"
+    @echo "确认执行彻底清理? [y/N]"
     @read -r confirm; \
     if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
-        echo "🧹 清理主机服务..."; \
-        docker compose -f master-compose.yml --env-file {{default_env}} down -v 2>/dev/null || true; \
-        echo "🧹 清理僚机服务..."; \
-        docker compose -f worker-compose.yml --env-file {{worker_env}} down -v 2>/dev/null || true; \
-        echo "🧹 清理Docker资源..."; \
-        docker system prune -f; \
-        echo "✅ 清理完成"; \
+        echo "🧹 步骤1: 彻底清理主机服务..."; \
+        just master-clean; \
+        echo "🧹 步骤2: 彻底清理僚机服务..."; \
+        just worker-clean; \
+        echo "🧹 步骤3: 清理容器和网络（保留镜像）..."; \
+        docker container prune -f; \
+        docker network prune -f; \
+        echo "🧹 步骤4: 清理未使用的卷..."; \
+        docker volume prune -f; \
+        echo "✅ 彻底清理完成 - 系统已重置到初始状态"; \
+        echo "💡 下次启动将是全新环境，不会有残留数据干扰"; \
     else \
         echo "❌ 取消清理操作"; \
     fi
