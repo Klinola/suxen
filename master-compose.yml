@@ -15,7 +15,7 @@ x-base-environment: &base-environment
 
 # 统一镜像版本管理
 x-agent-image: &agent-image risczero/risc0-bento-agent:2.3.0
-x-rest-api-image: &rest-api-image risczero/risc0-bento-rest-api:3.0.0@sha256:caa6012548777a461b4e487d673bd0d23606f97cdecea9d1612fafd8fa8a9102
+x-rest-api-image: &rest-api-image risczero/risc0-bento-rest-api:2.3.0
 
 services:
   # Redis集群主节点 - 针对80 GPU集中式优化

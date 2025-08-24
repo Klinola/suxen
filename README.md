@@ -1,89 +1,85 @@
-# Boundless Nexus - 50 GPU分布式零知识证明集群
+# Nexus Cluster - Distributed Computing Infrastructure
 
-## 📖 概述
+## 📖 Overview
 
-**Boundless Nexus** 是一个为50+个GPU设计的高性能分布式零知识证明计算集群部署方案。
+**Nexus** is a high-performance distributed computing cluster deployment solution designed for large-scale GPU environments, optimized for computational workloads requiring mathematical proof generation.
 
-### 🏗️ 架构设计
+### 🏗️ Architecture Design
 
 ```
-主机 (Master) + 多个僚机 (Workers)
-├── 主从数据库同步 (Redis + PostgreSQL + MinIO)
-├── 本地化数据访问 (减少网络延迟)
-├── 水平扩展支持 (无限制添加僚机)
-└── 高可用容错 (主从备份机制)
+Master Node + Multiple Worker Nodes
+├── Master-Worker Database Synchronization (Redis + PostgreSQL + MinIO)
+├── Localized Data Access (Reduced Network Latency)
+├── Horizontal Scaling Support (Unlimited Worker Addition)
+└── High Availability & Fault Tolerance (Master-Replica Backup)
 ```
 
-### ⚡ 性能优势
+### ⚡ Performance Advantages
 
-- **超低延迟**: 内网连接 + 本地数据库访问
-- **高并发**: 支持50+ GPU并行证明计算  
-- **负载均衡**: 智能分散数据库连接压力
-- **容错保障**: 主从同步确保数据安全
+- **Ultra-Low Latency**: Internal network connectivity with local database access
+- **High Concurrency**: Support for 50+ GPU parallel computational processing
+- **Load Balancing**: Intelligent distribution of database connection pressure
+- **Fault Tolerance**: Master-replica synchronization ensures data integrity
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 1. 配置主机IP
+### 1. Configure Master IP
 ```bash
-# 编辑配置文件
+# Edit configuration files
 vim bento.env
 vim worker.env
 
-# 修改为你的主机内网IP
+# Set your master node internal IP
 MASTER_HOST_IP=192.168.1.100
 ```
 
-### 2. 部署主机
+### 2. Deploy Master Node
 ```bash
 just master-up
 ```
 
-### 3. 部署僚机
+### 3. Deploy Worker Nodes
 ```bash
-# 将文件复制到僚机，然后执行:
+# Copy files to worker machines, then execute:
 just worker-up
 ```
 
-### 4. 验证集群
+### 4. Verify Cluster Status
 ```bash
 just status
 ```
 
-## 📁 文件说明
+## 📁 File Structure
 
-| 文件 | 用途 |
-|------|------|
-| `master-compose.yml` | 主机Docker Compose配置 |
-| `worker-compose.yml` | 僚机Docker Compose配置 |
-| `bento.env` | 主机环境变量配置 |
-| `worker.env` | 僚机环境变量配置 |
-| `justfile` | 部署管理脚本 |
-| `DEPLOYMENT.md` | 详细部署指南 |
+| File | Purpose |
+|------|---------|
+| `master-compose.yml` | Master node Docker Compose configuration |
+| `worker-compose.yml` | Worker node Docker Compose configuration |
+| `bento.env` | Master node environment variables |
+| `worker.env` | Worker node environment variables |
+| `justfile` | Deployment management scripts |
+| `DEPLOYMENT.md` | Detailed deployment guide |
 
-## 🔧 管理命令
+## 🔧 Management Commands
 
 ```bash
-just help          # 显示帮助
-just config        # 配置向导
-just master-up      # 启动主机
-just worker-up      # 启动僚机
-just status         # 查看状态
-just monitor        # 性能监控
-just logs [service] # 查看日志
-just clean          # 清理数据
+just help          # Show help
+just config        # Configuration wizard
+just master-up      # Start master node
+just worker-up      # Start worker node
+just status         # Check cluster status
+just monitor        # Performance monitoring
+just logs [service] # View service logs
+just clean          # Clean data
 ```
 
-## ⚠️ 重要提醒
+## ⚠️ Important Notes
 
-1. **必须使用内网IP** - 确保最佳性能
-2. **网络要求** - 推荐万兆以太网
-3. **资源要求** - 根据实际硬件调整配置
-4. **端口开放** - 6379(Redis), 5432(PostgreSQL), 9000/9001(MinIO)
+1. **Internal IP Required** - Ensures optimal performance
+2. **Network Requirements** - 10GbE recommended for best results
+3. **Resource Requirements** - Adjust configuration based on actual hardware
+4. **Port Configuration** - 6379(Redis), 5432(PostgreSQL), 9000/9001(MinIO)
 
-## 📚 更多文档
+## 📚 Documentation
 
-详细部署指南请查看 `DEPLOYMENT.md`
-
----
-
-🌟 **Nexus** - 拉丁语"连接"，象征着将分布式计算节点智能连接为统一的高性能集群。
+For detailed deployment instructions, see `DEPLOYMENT.md`
