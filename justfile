@@ -143,7 +143,7 @@ logs service="":
     fi
 
 # 查看主机服务日志
-logs-master:
+master-logs:
     @echo "📜 查看主机服务日志:"
     @if [ -f "master-compose.yml" ]; then \
         docker compose -f master-compose.yml logs -f --tail=50; \
@@ -152,7 +152,7 @@ logs-master:
     fi
 
 # 查看僚机服务日志
-logs-worker:
+worker-logs:
     @echo "📜 查看僚机服务日志:"
     @if [ -f "worker-compose.yml" ]; then \
         docker compose -f worker-compose.yml logs -f --tail=50; \

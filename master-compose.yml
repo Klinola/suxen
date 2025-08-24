@@ -151,12 +151,12 @@ services:
 
       # --- 3. 定义 PgBouncer 自身的行为 ---
       - AUTH_TYPE=md5
-      - POOL_MODE=transaction
+      - POOL_MODE=session
       - MAX_CLIENT_CONN=5000
-      - DEFAULT_POOL_SIZE=20
+      - DEFAULT_POOL_SIZE=50
       - MAX_SERVER_CONNECTIONS=200
-      # 增加日志输出，便于调试
-      - VERBOSE=1
+      # 减少日志输出
+      - VERBOSE=0
     networks:
       - bento-network
   # MinIO主节点
