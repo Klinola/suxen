@@ -152,9 +152,9 @@ services:
       # --- 3. 定义 PgBouncer 自身的行为 ---
       - AUTH_TYPE=md5
       - POOL_MODE=session
-      - MAX_CLIENT_CONN=5000
-      - DEFAULT_POOL_SIZE=50
-      - MAX_SERVER_CONNECTIONS=200
+      - MAX_CLIENT_CONN=10000
+      - DEFAULT_POOL_SIZE=100
+      - MAX_SERVER_CONNECTIONS=1000
       # 减少日志输出
       - VERBOSE=0
     networks:
@@ -309,8 +309,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    mem_limit: 1G
-    cpus: 1
+    mem_limit: 10G
+    cpus: 5
     environment:
       <<: *base-environment
     ports:
