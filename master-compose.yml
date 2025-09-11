@@ -13,9 +13,28 @@ x-base-environment: &base-environment
   RUST_LOG: ${RUST_LOG:-info}
   RUST_BACKTRACE: 1
 
+# Agent 通用配置
+x-agent-common: &agent-common
+  runtime: nvidia
+  build:
+    context: .
+    dockerfile: ${AGENT_DOCKERFILE:-dockerfiles/agent.prebuilt.dockerfile}
+    args:
+      BINARY_URL: ${BENTO_BINARY_URL:-https://github.com/boundless-xyz/boundless/releases/download/bento-v0.14.0/bento-bundle-linux-amd64.tar.gz}
+  restart: always
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+  environment:
+    <<: *base-environment
+
 # 统一镜像版本管理
-x-agent-image: &agent-image risczero/risc0-bento-agent:2.3.0
-x-rest-api-image: &rest-api-image risczero/risc0-bento-rest-api:2.3.0
+x-agent-image: &agent-image risczero/risc0-bento-agent:2.3.1
+x-rest-api-image: &rest-api-image risczero/risc0-bento-rest-api:2.3.1
 
 services:
   # Redis集群主节点 - 针对80 GPU集中式优化
@@ -24,21 +43,16 @@ services:
     image: ${REDIS_IMG:-redis:7.2.5-alpine3.19}
     restart: always
     ports:
-      - "0.0.0.0:6379:6379"
+      - "${MASTER_HOST_IP:-0.0.0.0}:6379:6379"
     volumes:
       - redis-data:/data
       - type: tmpfs
         target: /tmp
         tmpfs:
-          size: 32G
-    # 80 GPU集中式Redis优化配置
-    mem_limit: ${REDIS_MEM_LIMIT:-256G}
-    cpus: ${REDIS_CPUS:-32}
-    # --- MODIFIED ---: 移除了可能导致启动失败的 sysctls 配置
-    # sysctls:
-    #   - net.core.somaxconn=${REDIS_SOMAXCONN:-65535}
-    #   - net.core.netdev_max_backlog=10000
-    #   - net.ipv4.tcp_max_syn_backlog=16384
+          size: 64G
+    # 调整为合理的资源分配
+    mem_limit: ${REDIS_MEM_LIMIT:-128G}
+    cpus: ${REDIS_CPUS:-24}
     ulimits:
       memlock: -1
       nofile:
@@ -48,9 +62,9 @@ services:
       redis-server
       --bind 0.0.0.0
       --protected-mode no
-      --maxmemory ${REDIS_MAX_MEMORY:-128g}
+      --maxmemory ${REDIS_MAX_MEMORY:-100g}
       --maxmemory-policy ${REDIS_MAX_MEMORY_POLICY:-allkeys-lru}
-      --maxclients ${REDIS_MAX_CLIENTS:-10000}
+      --maxclients ${REDIS_MAX_CLIENTS:-50000}
       --tcp-backlog ${REDIS_TCP_BACKLOG:-16384}
       --tcp-keepalive ${REDIS_TCP_KEEPALIVE:-300}
       --timeout ${REDIS_TIMEOUT:-0}
@@ -81,9 +95,9 @@ services:
     hostname: ${POSTGRES_HOST:-postgres}
     image: ${POSTGRES_IMG:-postgres:16.3-bullseye}
     restart: always
-    mem_limit: ${POSTGRES_MEM_LIMIT:-192G}
-    cpus: ${POSTGRES_CPUS:-24}
-    shm_size: ${POSTGRES_SHM_SIZE:-16G}
+    mem_limit: ${POSTGRES_MEM_LIMIT:-256G}
+    cpus: ${POSTGRES_CPUS:-32}
+    shm_size: ${POSTGRES_SHM_SIZE:-64G}
     ulimits:
       nofile:
         soft: 65536
@@ -93,7 +107,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-worker}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       POSTGRES_INITDB_ARGS: "--data-checksums --wal-segsize=64 --auth-host=md5 --auth-local=trust"
-      # PGDATA: /var/lib/postgresql/data/pgdata # 看看是否需要这行环境变量来强制初始化？
     ports:
       - '0.0.0.0:${POSTGRES_PORT:-5432}:${POSTGRES_PORT:-5432}'
     volumes:
@@ -101,20 +114,20 @@ services:
     command: >
       postgres
       -p ${POSTGRES_PORT:-5432}
-      -c max_connections=2000
-      -c shared_buffers=128GB
-      -c work_mem=128MB
-      -c maintenance_work_mem=2GB
-      -c effective_cache_size=128GB
-      -c wal_buffers=128MB
-      -c max_wal_size=4GB
-      -c min_wal_size=1GB
+      -c max_connections=5000
+      -c shared_buffers=64GB
+      -c work_mem=512MB
+      -c maintenance_work_mem=8GB
+      -c effective_cache_size=192GB
+      -c wal_buffers=512MB
+      -c max_wal_size=16GB
+      -c min_wal_size=4GB
       -c checkpoint_completion_target=0.9
       -c random_page_cost=1.1
       -c effective_io_concurrency=200
-      -c max_worker_processes=16
-      -c max_parallel_workers=8
-      -c max_parallel_workers_per_gather=4
+      -c max_worker_processes=32
+      -c max_parallel_workers=16
+      -c max_parallel_workers_per_gather=8
       -c listen_addresses='*'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-worker} -d ${POSTGRES_DB:-taskdb}"]
@@ -127,7 +140,6 @@ services:
 
   # pgbouncer 连接池
   pgbouncer:
-    # 镜像保持不变
     image: edoburu/pgbouncer:latest
     hostname: pgbouncer
     restart: always
@@ -136,36 +148,28 @@ services:
         condition: service_healthy
     ports:
       - "0.0.0.0:6432:5432"
-    # --- MODIFIED ---: 使用符合 edoburu/pgbouncer 官方写法的环境变量
     environment:
-      # --- 1. 定义要连接的上游数据库 ---
-      # 告诉 PgBouncer，当客户端请求 "taskdb" 时，应该去哪里找
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=taskdb
-
-      # --- 2. 定义允许连接到 PgBouncer 的用户和密码 ---
-      # 这将自动写入 userlist.txt
       - DB_USER=${POSTGRES_USER:-worker}
       - DB_PASSWORD=${POSTGRES_PASSWORD:-password}
-
-      # --- 3. 定义 PgBouncer 自身的行为 ---
       - AUTH_TYPE=md5
       - POOL_MODE=session
       - MAX_CLIENT_CONN=10000
       - DEFAULT_POOL_SIZE=100
-      - MAX_SERVER_CONNECTIONS=1000
-      # 减少日志输出
+      - MAX_SERVER_CONNECTIONS=500
       - VERBOSE=0
     networks:
       - bento-network
+
   # MinIO主节点
   minio:
     hostname: ${MINIO_HOST:-minio}
     image: ${MINIO_IMG:-minio/minio:RELEASE.2024-05-28T17-19-04Z}
     restart: always
-    mem_limit: ${MINIO_MEM_LIMIT:-32G}
-    cpus: ${MINIO_CPUS:-8}
+    mem_limit: ${MINIO_MEM_LIMIT:-64G}
+    cpus: ${MINIO_CPUS:-16}
     ulimits:
       nofile:
         soft: 65536
@@ -178,7 +182,7 @@ services:
       - type: tmpfs
         target: /tmp
         tmpfs:
-          size: 2G
+          size: 8G
     environment:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-admin}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASS:-password}
@@ -195,21 +199,9 @@ services:
 
   # GPU Prove Agents (主机8个GPU)
   gpu_prove_agent0: &gpu-agent
-    image: *agent-image
-    runtime: nvidia
-    restart: always
-    # --- MODIFIED ---: 修正了启动依赖
-    depends_on:
-      pgbouncer:
-        condition: service_started
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    mem_limit: 24G
-    cpus: 4
-    environment:
-      <<: *base-environment
+    <<: *agent-common
+    mem_limit: 64G
+    cpus: 16
     entrypoint: /app/agent -t prove --redis-ttl ${REDIS_TTL:-57600}
     deploy:
       resources:
@@ -231,20 +223,9 @@ services:
 
   # Executor Agents
   exec_agent0: &exec-agent
-    image: *agent-image
-    restart: always
-    # --- MODIFIED ---: 修正了启动依赖
-    depends_on:
-      pgbouncer:
-        condition: service_started
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    mem_limit: 4G
-    cpus: 4
-    environment:
-      <<: *base-environment
+    <<: *agent-common
+    mem_limit: 16G
+    cpus: 8
     entrypoint: /app/agent -t exec --segment-po2 ${SEGMENT_SIZE:-21} --redis-ttl ${REDIS_TTL:-57600}
     networks:
       - bento-network
@@ -252,43 +233,26 @@ services:
   exec_agent1: { <<: *exec-agent }
   exec_agent2: { <<: *exec-agent }
   exec_agent3: { <<: *exec-agent }
-
+  exec_agent4: { <<: *exec-agent }
+  exec_agent5: { <<: *exec-agent }
+  exec_agent6: { <<: *exec-agent }
+  exec_agent7: { <<: *exec-agent }
+  exec_agent8: { <<: *exec-agent }
+  
   # Aux Agent
   aux_agent:
-    image: *agent-image
-    restart: always
-    # --- MODIFIED ---: 修正了启动依赖
-    depends_on:
-      pgbouncer:
-        condition: service_started
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    mem_limit: 256M
-    cpus: 1
-    environment:
-      <<: *base-environment
+    <<: *agent-common
+    mem_limit: 4G
+    cpus: 2
     entrypoint: /app/agent -t aux --monitor-requeue --redis-ttl ${REDIS_TTL:-57600}
     networks:
       - bento-network
 
   # SNARK Agents
   snark_agent0: &snark-agent
-    image: *agent-image
-    restart: always
-    # --- MODIFIED ---: 修正了启动依赖
-    depends_on:
-      pgbouncer:
-        condition: service_started
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    mem_limit: 16G
-    cpus: 48
-    environment:
-      <<: *base-environment
+    <<: *agent-common
+    mem_limit: 96G
+    cpus: 64
     entrypoint: /app/agent -t snark --redis-ttl ${REDIS_TTL:-57600}
     ulimits:
       stack: 90000000
@@ -299,23 +263,30 @@ services:
 
   # REST API
   rest_api:
-    image: *rest-api-image
+    build:
+      context: .
+      dockerfile: ${REST_API_DOCKERFILE:-dockerfiles/rest_api.prebuilt.dockerfile}
+      args:
+        BINARY_URL: ${BENTO_BINARY_URL:-https://github.com/boundless-xyz/boundless/releases/download/bento-v0.14.0/bento-bundle-linux-amd64.tar.gz}
     restart: always
-    # --- MODIFIED ---: 修正了启动依赖
     depends_on:
-      pgbouncer:
-        condition: service_started
-      redis:
+      postgres:
         condition: service_healthy
       minio:
         condition: service_healthy
-    mem_limit: 10G
-    cpus: 5
+    mem_limit: 32G
+    cpus: 16
     environment:
       <<: *base-environment
     ports:
       - '0.0.0.0:8081:8081'
     entrypoint: /app/rest_api --bind-addr 0.0.0.0:8081 --snark-timeout ${SNARK_TIMEOUT:-180}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     networks:
       - bento-network
 

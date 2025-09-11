@@ -15,19 +15,27 @@ x-base-environment: &base-environment
   no_proxy: "localhost,127.0.0.1,::1,192.168.0.0/16,172.16.0.0/12,10.0.0.0/8"
   NO_PROXY: "localhost,127.0.0.1,::1,192.168.0.0/16,172.16.0.0/12,10.0.0.0/8"
 
+# Agent 通用配置
+x-agent-common: &agent-common
+  runtime: nvidia
+  build:
+    context: .
+    dockerfile: ${AGENT_DOCKERFILE:-dockerfiles/agent.prebuilt.dockerfile}
+    args:
+      BINARY_URL: ${BENTO_BINARY_URL:-https://github.com/boundless-xyz/boundless/releases/download/bento-v0.14.0/bento-bundle-linux-amd64.tar.gz}
+  restart: always
+  environment:
+    <<: *base-environment
+
 # 统一agent镜像版本管理
 x-agent-image: &agent-image risczero/risc0-bento-agent:2.3.0
 
 services:
   # GPU Prove Agents (Worker节点8个GPU)
   gpu_prove_agent0: &gpu-agent
-    image: *agent-image
-    runtime: nvidia
-    restart: always
-    mem_limit: 24G
-    cpus: 4
-    environment:
-      <<: *base-environment
+    <<: *agent-common
+    mem_limit: 64G
+    cpus: 16
     entrypoint: /app/agent -t prove --redis-ttl ${REDIS_TTL:-57600}
     deploy:
       resources:
