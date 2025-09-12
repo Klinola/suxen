@@ -13,6 +13,9 @@ x-base-environment: &base-environment
   RUST_LOG: ${RUST_LOG:-info}
   RISC0_HOME: /usr/local/risc0
   RUST_BACKTRACE: 1
+  # 内网代理排除配置
+  no_proxy: localhost,127.0.0.1,::1,172.16.0.0/12,10.0.0.0/8,192.168.0.0/16,minio,postgres,redis,pgbouncer
+  NO_PROXY: localhost,127.0.0.1,::1,172.16.0.0/12,10.0.0.0/8,192.168.0.0/16,minio,postgres,redis,pgbouncer
 
 # Agent 通用配置
 x-agent-common: &agent-common
@@ -32,10 +35,6 @@ x-agent-common: &agent-common
       condition: service_healthy
   environment:
     <<: *base-environment
-
-# 统一镜像版本管理
-x-agent-image: &agent-image risczero/risc0-bento-agent:2.3.1
-x-rest-api-image: &rest-api-image risczero/risc0-bento-rest-api:2.3.1
 
 services:
   # Redis集群主节点 - 针对80 GPU集中式优化
@@ -227,6 +226,9 @@ services:
     <<: *agent-common
     mem_limit: 16G
     cpus: 8
+    environment:
+      <<: *base-environment
+      RISC0_KECCAK_PO2: ${RISC0_KECCAK_PO2:-17}
     entrypoint: /app/agent -t exec --segment-po2 ${SEGMENT_SIZE:-21} --redis-ttl ${REDIS_TTL:-57600}
     networks:
       - bento-network
@@ -249,20 +251,20 @@ services:
     networks:
       - bento-network
 
-  # SNARK Agents
-  snark_agent0: &snark-agent
-    <<: *agent-common
-    mem_limit: 96G
-    cpus: 64
-    entrypoint: /app/agent -t snark --redis-ttl ${REDIS_TTL:-57600}
-    ulimits:
-      stack: 90000000
-    networks:
-      - bento-network
+  # SNARK Agents - COMMENTED OUT FOR v0.14.0 (snark_agent is deprecated, GPU prove agents now handle Groth16)
+  # snark_agent0: &snark-agent
+  #   <<: *agent-common
+  #   mem_limit: 96G
+  #   cpus: 64
+  #   entrypoint: /app/agent -t snark --redis-ttl ${REDIS_TTL:-57600}
+  #   ulimits:
+  #     stack: 90000000
+  #   networks:
+  #     - bento-network
 
-  snark_agent1: { <<: *snark-agent }
+  # snark_agent1: { <<: *snark-agent }
 
-  # REST API
+  # REST API - 使用本地dockerfile从源码构建（内置代理配置）
   rest_api:
     build:
       context: .
