@@ -4,6 +4,7 @@
 # 默认配置
 default_env := "bento.env"
 worker_env := "worker.env"
+broker_env := "broker.env"
 
 # 显示帮助信息
 help:
@@ -15,6 +16,9 @@ help:
     @echo "  master down     - 停止主机服务"
     @echo "  master clean    - 彻底清理主机服务（删除所有数据）"
     @echo "  master status   - 查看主机状态"
+    @echo "  broker up       - 启动broker服务（需要主机服务8081端口正常）"
+    @echo "  broker down     - 停止broker服务"
+    @echo "  broker logs     - 查看broker服务日志"
     @echo "  worker up       - 启动僚机服务"
     @echo "  worker down     - 停止僚机服务"
     @echo "  worker clean    - 彻底清理僚机服务"
@@ -29,6 +33,7 @@ help:
     @echo "🔧 配置文件:"
     @echo "  bento.env       - 主机配置"
     @echo "  worker.env      - 僚机配置"
+    @echo "  broker.env      - broker配置"
     @echo ""
     @echo "⚠️  重要: 请先运行 'just config' 配置主机IP！"
 
@@ -453,6 +458,39 @@ restart:
     @just master-up
     @sleep 10
     @just worker-up
+
+# 启动broker服务
+broker-up:
+    @echo "🚀 启动broker服务..."
+    @echo "🔍 检查主机REST API服务（8081端口）..."
+    @if curl -f -s http://localhost:8081/health >/dev/null 2>&1; then \
+        echo "✅ REST API服务正常，继续启动broker"; \
+    else \
+        echo "❌ REST API服务(8081端口)不可用，请先启动主机服务: just master-up"; \
+        exit 1; \
+    fi
+    @echo "🔧 构建broker镜像..."
+    @docker compose -f broker-compose.yml --env-file {{broker_env}} build
+    @echo "▶️  启动broker服务..."
+    @docker compose -f broker-compose.yml --env-file {{broker_env}} up -d
+    @echo "✅ broker服务启动完成"
+    @echo "📜 查看broker日志:"
+    @docker compose -f broker-compose.yml --env-file {{broker_env}} logs -f --tail=20
+
+# 查看broker服务日志
+broker-logs:
+    @echo "📜 查看broker服务日志:"
+    @if [ -f "broker-compose.yml" ]; then \
+        docker compose -f broker-compose.yml --env-file {{broker_env}} logs -f --tail=50; \
+    else \
+        echo "❌ 未找到broker-compose.yml文件"; \
+    fi
+
+# 停止broker服务
+broker-down:
+    @echo "🛑 停止broker服务..."
+    @docker compose -f broker-compose.yml --env-file {{broker_env}} down
+    @echo "✅ broker服务已停止"
 
 # 验证部署
 verify:

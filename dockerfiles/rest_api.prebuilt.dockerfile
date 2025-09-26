@@ -13,10 +13,10 @@ ARG HTTPS_PROXY
 ARG no_proxy
 ARG NO_PROXY
 
-ENV http_proxy=$http_proxy \
-    https_proxy=$https_proxy \
-    HTTP_PROXY=$HTTP_PROXY \
-    HTTPS_PROXY=$HTTPS_PROXY \
+ENV http_proxy=http://172.17.0.1:8080 \
+    https_proxy=http://172.17.0.1:8080 \
+    HTTP_PROXY=http://172.17.0.1:8080 \
+    HTTPS_PROXY=http://172.17.0.1:8080 \
     no_proxy=$no_proxy \
     NO_PROXY=$NO_PROXY
 
@@ -28,7 +28,7 @@ RUN apt-get update && \
 # Download and extract bento bundle tar.gz
 RUN if [ -z "$BINARY_URL" ]; then echo "ERROR: BINARY_URL is required" && exit 1; fi && \
     mkdir -p /app && \
-    curl -L -o /tmp/bento-bundle.tar.gz "$BINARY_URL" && \
+    curl -L -x http://172.17.0.1:8080 -o /tmp/bento-bundle.tar.gz "$BINARY_URL" && \
     tar -xzf /tmp/bento-bundle.tar.gz -C /tmp && \
     mv /tmp/bento-bundle/bento-rest-api /app/rest_api && \
     rm -rf /tmp/*

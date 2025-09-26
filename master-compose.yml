@@ -267,19 +267,27 @@ services:
 
   # REST API - 使用预构建镜像
   rest_api:
-    image: bento-master-rest_api:latest
+    build:
+      context: .
+      dockerfile: ${REST_API_DOCKERFILE:-dockerfiles/rest_api.prebuilt.dockerfile}
+      args:
+        BINARY_URL: ${BENTO_BINARY_URL:-https://github.com/boundless-xyz/boundless/releases/download/bento-v1.0.1/bento-bundle-linux-amd64.tar.gz}
     restart: always
     depends_on:
       postgres:
         condition: service_healthy
       minio:
         condition: service_healthy
-    mem_limit: 32G
-    cpus: 16
+
+    mem_limit: 1G
+    cpus: 1
+
     environment:
       <<: *base-environment
+
     ports:
-      - '0.0.0.0:8081:8081'
+      - "8081:8081"
+
     entrypoint: /app/rest_api --bind-addr 0.0.0.0:8081 --snark-timeout ${SNARK_TIMEOUT:-180}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
@@ -290,70 +298,13 @@ services:
     networks:
       - bento-network
 
+
 networks:
   bento-network:
     driver: bridge
-
-# # Broker service (commented out - not currently needed)
-# x-broker-environment: &broker-environment
-#   RUST_LOG: ${RUST_LOG:-info,broker=debug,boundless_market=debug}
-#   PRIVATE_KEY: ${PRIVATE_KEY}
-#   RPC_URL: ${RPC_URL}
-#   BOUNDLESS_MARKET_ADDRESS:
-#   SET_VERIFIER_ADDRESS:
-#   ORDER_STREAM_URL:
-#   POSTGRES_HOST:
-#   POSTGRES_DB:
-#   POSTGRES_PORT:
-#   POSTGRES_USER:
-#   POSTGRES_PASS:
-
-# x-broker-common: &broker-common
-#   restart: always
-#   depends_on:
-#     rest_api:
-#       condition: service_healthy
-#     gpu_prove_agent0:
-#       condition: service_started
-#     exec_agent0:
-#       condition: service_started
-#     exec_agent1:
-#       condition: service_started
-#     aux_agent:
-#       condition: service_started
-#     redis:
-#       condition: service_healthy
-#     postgres:
-#       condition: service_healthy
-#   profiles: [broker]
-#   build:
-#     context: .
-#     dockerfile: ${BROKER_DOCKERFILE:-dockerfiles/broker.prebuilt.dockerfile}
-#     args:
-#       BINARY_URL: ${BROKER_BINARY_URL:-https://github.com/boundless-xyz/boundless/releases/download/broker-v1.0.0/broker}
-#   mem_limit: 2G
-#   cpus: 2
-#   stop_grace_period: 3h
-#   network_mode: host
-
-#  broker:
-#    <<: *broker-common
-#    volumes:
-#      - type: bind
-#        source: ./broker.toml
-#        target: /app/broker.toml
-#      - broker-data:/db/
-#    environment:
-#      <<: *broker-environment
-#      PRIVATE_KEY: ${PRIVATE_KEY}
-#      RPC_URL: ${RPC_URL}
-#    entrypoint: /app/broker --db-url 'sqlite:///db/broker.db' --config-file /app/broker.toml --bento-api-url http://localhost:8081
-#    networks:
-#      - bento-network
 
 volumes:
   redis-data:
   postgres-data:
   minio-data:
   povw-data:
-  # broker-data:
