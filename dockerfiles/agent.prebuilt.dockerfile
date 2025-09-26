@@ -6,21 +6,23 @@ FROM ${CUDA_RUNTIME_IMG}
 
 ARG BINARY_URL
 
-ENV http_proxy=http://172.17.0.1:8080 \
-    https_proxy=http://172.17.0.1:8080 \
-    HTTP_PROXY=http://172.17.0.1:8080 \
-    HTTPS_PROXY=http://172.17.0.1:8080 \
-    no_proxy=localhost,127.0.0.1,::1 \
-    NO_PROXY=localhost,127.0.0.1,::1
+ARG http_proxy
+ARG https_proxy
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG no_proxy
+ARG NO_PROXY
+
+ENV http_proxy=$http_proxy \
+    https_proxy=$https_proxy \
+    HTTP_PROXY=$HTTP_PROXY \
+    HTTPS_PROXY=$HTTPS_PROXY \
+    no_proxy=$no_proxy \
+    NO_PROXY=$NO_PROXY
 
 # Install runtime dependencies matching non-prebuilt version
-RUN apt-get clean && rm -rf /var/lib/apt/lists/* && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
-        libssl3 \
-        curl \
-        tar && \
+RUN apt-get update && \
+    apt-get install -y ca-certificates libssl3 curl tar && \
     rm -rf /var/lib/apt/lists/*
 
 # Download and extract bento bundle tar.gz

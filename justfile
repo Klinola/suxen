@@ -50,6 +50,28 @@ config:
 master-up:
     @echo "🚀 启动主机服务..."
     @echo "📍 主机IP: $(grep MASTER_HOST_IP {{default_env}} | cut -d'=' -f2)"
+    @echo "🔧 构建Docker镜像 (v1.0.0)..."
+    @docker build --network=host \
+       --build-arg http_proxy=http://127.0.0.1:8080 \
+       --build-arg https_proxy=http://127.0.0.1:8080 \
+       --build-arg HTTP_PROXY=http://127.0.0.1:8080 \
+       --build-arg HTTPS_PROXY=http://127.0.0.1:8080 \
+       --build-arg no_proxy=localhost,127.0.0.1,::1 \
+       --build-arg NO_PROXY=localhost,127.0.0.1,::1 \
+       -f dockerfiles/rest_api.prebuilt.dockerfile \
+       --build-arg BINARY_URL=https://github.com/boundless-xyz/boundless/releases/download/bento-v1.0.0/bento-bundle-linux-amd64.tar.gz \
+       -t bento-master-rest_api . && \
+     docker build --network=host \
+       --build-arg http_proxy=http://127.0.0.1:8080 \
+       --build-arg https_proxy=http://127.0.0.1:8080 \
+       --build-arg HTTP_PROXY=http://127.0.0.1:8080 \
+       --build-arg HTTPS_PROXY=http://127.0.0.1:8080 \
+       --build-arg no_proxy=localhost,127.0.0.1,::1 \
+       --build-arg NO_PROXY=localhost,127.0.0.1,::1 \
+       -f dockerfiles/agent.prebuilt.dockerfile \
+       --build-arg BINARY_URL=https://github.com/boundless-xyz/boundless/releases/download/bento-v1.0.0/bento-bundle-linux-amd64.tar.gz \
+       -t bento-master-agent .
+    @echo "✅ 镜像构建完成"
     docker compose -f master-compose.yml --env-file {{default_env}} up -d
     @echo "✅ 主机服务启动完成"
     @echo ""
