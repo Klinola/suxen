@@ -1,0 +1,26 @@
+bento-bundle/bento-agent
+bento-bundle/bento-cli
+bento-bundle/bento-rest-api
+logss/
+setup-proxy.zip
+.gitignore
+agent.tar
+bento-bundle-linux-amd64.tar.gz
+
+# Claude Code Kit - Generated Files
+claude-code-kit/
+.claude/
+.mcp/
+.mcp.json
+mcp-*.json
+*.tmp
+database.sqlite
+*.sqlite
+*.log
+*.cache
+*.backup
+*.bak
+.env.local
+CLAUDE.md
+rules/
+.env
