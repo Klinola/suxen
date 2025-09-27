@@ -131,6 +131,10 @@ cache_dir = "./cache"
 #groth16_verify_gas_estimate = 250000
 
 [prover]
+# Prover backend type - use "bento" for local Bento API instead of Bonsai
+backend = "bento"
+# Bento API URL (use container service name for Docker networking)
+bento_api_url = "http://rest_api:8081"
 # Number of retries to poll for proving status.
 #
 # Provides a little durability for transient failures.

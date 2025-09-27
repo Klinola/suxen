@@ -472,7 +472,9 @@ broker-up:
     @echo "🔧 构建broker镜像..."
     @docker compose -f broker-compose.yml --env-file {{broker_env}} build
     @echo "▶️  启动broker服务..."
-    @docker compose -f broker-compose.yml --env-file {{broker_env}} up -d
+    @docker network ls | grep -q bento-master_bento-network || \
+        (echo "❌ 未找到master网络，请先启动主机服务: just master-up"; exit 1)
+    @COMPOSE_PROJECT_NAME=bento-broker docker compose -f broker-compose.yml --env-file {{broker_env}} up -d
     @echo "✅ broker服务启动完成"
     @echo "📜 查看broker日志:"
     @docker compose -f broker-compose.yml --env-file {{broker_env}} logs -f --tail=20
